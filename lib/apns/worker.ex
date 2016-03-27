@@ -149,8 +149,8 @@ defmodule APNS.Worker do
         |> state.config.callback_module.error()
         {:reply, :ok, state}
       payload ->
+        {:ok, sec, _msec, :after} = Calendar.DateTime.diff(Calendar.DateTime.now_utc, state.apple_connected_time)
         cond do
-          {:ok, sec, _msec, :after} = Calendar.DateTime.diff(Calendar.DateTime.now_utc, state.apple_connected_time)
           state.counter >= state.config.reconnect_after ->
             Logger.debug "[APNS] #{state.counter} messages sent, reconnecting"
             send self, :connect_apple
