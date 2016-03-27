@@ -139,28 +139,29 @@ defmodule APNS.Worker do
   end
   def handle_call(%APNS.Message{} = msg, _from, %{config: config} = state) do
     limit = case msg.support_old_ios do
-      nil -> config.payload_limit
-      true -> @payload_max_old
-      false -> @payload_max_new
-    end
+              nil -> config.payload_limit
+              true -> @payload_max_old
+              false -> @payload_max_new
+            end
     case build_payload(msg, limit) do
       {:error, :payload_size_exceeded} ->
         APNS.Error.new(msg.id, 7)
         |> state.config.callback_module.error()
         {:reply, :ok, state}
       payload ->
-        if (state.counter >= state.config.reconnect_after) do
-          Logger.debug "[APNS] #{state.counter} messages sent, reconnecting"
-          send self, :connect_apple
+        cond do
+          state.counter >= state.config.reconnect_after ->
+            Logger.debug "[APNS] #{state.counter} messages sent, reconnecting"
+            send self, :connect_apple
+            GenServer.call(self, msg)
+          sec > state.config.timeout ->
+            Logger.debug "[APNS] socket_apple timeout, reconnecting"
+            send self, :connect_apple
+            GenServer.call(self, msg)
+          true ->
+            send_message(state.socket_apple, msg, payload)
         end
 
-        {:ok, sec, _msec, :after} = Calendar.DateTime.diff(Calendar.DateTime.now_utc, state.apple_connected_time)
-        if (sec > state.config.timeout) do
-          Logger.debug "[APNS] socket_apple timeout, reconnecting"
-          send self, :connect_apple
-        end
-
-        send_message(state.socket_apple, msg, payload)
 
         {:reply, :ok, %{state | counter: state.counter + 1}}
     end
@@ -203,9 +204,9 @@ defmodule APNS.Worker do
 
     length_diff = byte_size(json) - payload_limit
     length_alert = case payload.aps.alert do
-      %{body: body} -> byte_size(body)
-      str when is_binary(str) -> byte_size(str)
-    end
+                     %{body: body} -> byte_size(body)
+                     str when is_binary(str) -> byte_size(str)
+                   end
 
     cond do
       length_diff <= 0 -> json
@@ -259,26 +260,26 @@ defmodule APNS.Worker do
   defp send_message(socket, msg, payload) do
     token_bin = msg.token |> Base.decode16!(case: :mixed)
     frame = <<
-      1                  :: 8,
-      32                 :: 16,
-      token_bin          :: binary,
-      2                  :: 8,
-      byte_size(payload) :: 16,
-      payload            :: binary,
-      3                  :: 8,
-      4                  :: 16,
-      msg.id             :: 32,
-      4                  :: 8,
-      4                  :: 16,
-      msg.expiry         :: 32,
-      5                  :: 8,
-      1                  :: 16,
-      msg.priority       :: 8
+    1                  :: 8,
+    32                 :: 16,
+    token_bin          :: binary,
+    2                  :: 8,
+    byte_size(payload) :: 16,
+    payload            :: binary,
+    3                  :: 8,
+    4                  :: 16,
+    msg.id             :: 32,
+    4                  :: 8,
+    4                  :: 16,
+    msg.expiry         :: 32,
+    5                  :: 8,
+    1                  :: 16,
+    msg.priority       :: 8
     >>
     packet = <<
-      2                 ::  8,
-      byte_size(frame)  ::  32,
-      frame             ::  binary
+    2                 ::  8,
+    byte_size(frame)  ::  32,
+    frame             ::  binary
     >>
 
     result = :ssl.send(socket, [packet])
@@ -317,23 +318,23 @@ defmodule APNS.Worker do
     global_conf = Application.get_all_env :apns
     config = Enum.reduce opts, %{}, fn({key, default}, map) ->
       val = case pool_conf[key] do
-        nil -> Keyword.get(global_conf, key, default)
-        v -> v
-      end
+              nil -> Keyword.get(global_conf, key, default)
+              v -> v
+            end
       Map.put(map, key, val)
     end
 
     hosts = [
       dev: [apple: [host: "gateway.sandbox.push.apple.com", port: 2195],
-        feedback: [host: "feedback.sandbox.push.apple.com", port: 2196]],
+            feedback: [host: "feedback.sandbox.push.apple.com", port: 2196]],
       prod: [apple: [host: "gateway.push.apple.com", port: 2195],
-        feedback: [host: "feedback.push.apple.com", port: 2196]]
+             feedback: [host: "feedback.push.apple.com", port: 2196]]
     ]
     env = pool_conf[:env]
     payload_limit = case config.support_old_ios do
-      true -> @payload_max_old
-      false -> @payload_max_new
-    end
+                      true -> @payload_max_old
+                      false -> @payload_max_new
+                    end
     config2 = %{
       payload_limit: payload_limit,
       apple_host:    hosts[env][:apple][:host],
