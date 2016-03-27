@@ -155,17 +155,33 @@ defmodule APNS.Worker do
           state.counter >= state.config.reconnect_after ->
             Logger.debug "[APNS] #{state.counter} messages sent, reconnecting"
             send self, :connect_apple
-            GenServer.call(self, msg, 10000000)
+            GenServer.cast(self, msg)
           sec > state.config.timeout ->
             Logger.debug "[APNS] socket_apple timeout, reconnecting"
             send self, :connect_apple
-            GenServer.call(self, msg, 10000000)
+            GenServer.cast(self, msg)
           true ->
             send_message(state.socket_apple, msg, payload)
         end
 
-
         {:reply, :ok, %{state | counter: state.counter + 1}}
+    end
+  end
+
+  def handle_cast(%APNS.Message{} = msg, state) do
+    limit = case msg.support_old_ios do
+              nil -> config.payload_limit
+              true -> @payload_max_old
+              false -> @payload_max_new
+            end
+    case build_payload(msg, limit) do
+      {:error, :payload_size_exceeded} ->
+        APNS.Error.new(msg.id, 7)
+        |> state.config.callback_module.error()
+        {:noreply, state}
+      payload ->
+        send_message(state.socket_apple, msg, payload)
+        {:noreply, %{state | counter: state.counter + 1}}
     end
   end
 
