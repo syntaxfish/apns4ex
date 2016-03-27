@@ -168,7 +168,7 @@ defmodule APNS.Worker do
     end
   end
 
-  def handle_cast(%APNS.Message{} = msg, state) do
+  def handle_cast(%APNS.Message{} = msg,  %{config: config} = state) do
     limit = case msg.support_old_ios do
               nil -> config.payload_limit
               true -> @payload_max_old
