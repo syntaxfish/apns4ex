@@ -155,11 +155,11 @@ defmodule APNS.Worker do
           state.counter >= state.config.reconnect_after ->
             Logger.debug "[APNS] #{state.counter} messages sent, reconnecting"
             send self, :connect_apple
-            GenServer.call(self, msg)
+            GenServer.call(self, msg, 10000)
           sec > state.config.timeout ->
             Logger.debug "[APNS] socket_apple timeout, reconnecting"
             send self, :connect_apple
-            GenServer.call(self, msg)
+            GenServer.call(self, msg, 10000)
           true ->
             send_message(state.socket_apple, msg, payload)
         end
