@@ -56,6 +56,7 @@ defmodule APNS.Worker do
   end
 
   def handle_info(:connect_apple, %{config: config, ssl_opts: opts} = state) do
+    Logger.debug "[APNS] close socket"
     ssl_close(state.socket_apple)
     host = to_char_list(config.apple_host)
     port = config.apple_port
