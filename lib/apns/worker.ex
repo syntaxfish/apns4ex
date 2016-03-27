@@ -150,6 +150,7 @@ defmodule APNS.Worker do
         {:reply, :ok, state}
       payload ->
         cond do
+          {:ok, sec, _msec, :after} = Calendar.DateTime.diff(Calendar.DateTime.now_utc, state.apple_connected_time)
           state.counter >= state.config.reconnect_after ->
             Logger.debug "[APNS] #{state.counter} messages sent, reconnecting"
             send self, :connect_apple
