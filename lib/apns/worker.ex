@@ -174,13 +174,26 @@ defmodule APNS.Worker do
               true -> @payload_max_old
               false -> @payload_max_new
             end
+
     case build_payload(msg, limit) do
       {:error, :payload_size_exceeded} ->
         APNS.Error.new(msg.id, 7)
         |> state.config.callback_module.error()
         {:noreply, state}
       payload ->
-        send_message(state.socket_apple, msg, payload)
+        {:ok, sec, _msec, :after} = Calendar.DateTime.diff(Calendar.DateTime.now_utc, state.apple_connected_time)
+        cond do
+          state.counter >= state.config.reconnect_after ->
+            Logger.info "[APNS] #{state.counter} messages sent, reconnecting"
+            send self, :connect_apple
+            GenServer.cast(self, msg)
+          sec > state.config.timeout->
+            IO.puts "sec : #{inspect sec}, timeout: #{inspect state.config.timeout}"
+            send self, :connect_apple
+            GenServer.cast(self, msg)
+          true ->
+            send_message(state.socket_apple, msg, payload)
+        end
         {:noreply, %{state | counter: state.counter + 1}}
     end
   end
@@ -305,6 +318,8 @@ defmodule APNS.Worker do
       :ok -> Logger.debug("[APNS] success sent #{msg.id} to #{msg.token}")
       {:error, reason} -> Logger.error("[APNS] error (#{reason}) sending #{msg.id} to #{msg.token}")
     end
+
+    :timer.sleep 500
 
     result
   end
