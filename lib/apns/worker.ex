@@ -319,8 +319,6 @@ defmodule APNS.Worker do
       {:error, reason} -> Logger.error("[APNS] error (#{reason}) sending #{msg.id} to #{msg.token}")
     end
 
-    :timer.sleep 500
-
     result
   end
 
